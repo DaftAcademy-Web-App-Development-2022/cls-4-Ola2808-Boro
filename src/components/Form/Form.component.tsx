@@ -1,20 +1,29 @@
 import React from "react";
-
 import { useForm } from "react-hook-form";
 import { DEFAULT_CARD_COLOR } from "~/config/common.config";
 import { Model } from "~/models/Playlist.model";
 
+import slugify from "slugify";
+import useSpotify from "~/hooks/useSpotify.hook";
+import { Response as CreateResponse } from "~/pages/api/playlist";
+import useList from "~/hooks/useList.hook";
 import { BarsArrowDownIcon } from "@heroicons/react/20/solid";
 
 import styles from "./Form.module.css";
-
 type FormData = Model;
-
 interface Props {
   children?: React.ReactNode;
 }
 
 export const Form: React.FC<Props> = ({}) => {
+  const { mutate } = useList({
+    limit: 0,
+    revalidateOnMount: false,
+    revalidateOnFocus: false,
+  });
+
+  const { me } = useSpotify();
+
   const {
     register,
     setValue,
@@ -34,15 +43,44 @@ export const Form: React.FC<Props> = ({}) => {
 
   const [loading, setLoading] = React.useState(false);
 
-  const onSubmit = handleSubmit(async (data) => {
-    setLoading(true);
-    console.log(data);
+  React.useEffect(() => {
+    if (!me?.display_name) return;
+    setValue("owner", me.display_name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me]);
 
-    setTimeout(() => {
-      setLoading(false);
-      reset();
-    }, 2000);
-  });
+  const onSubmit = handleSubmit(async (data) => {
+  data.slug = slugify(data.name, { lower: true });    
+  try {
+    setLoading(true);
+    const response: Response = await fetch("/api/playlist", {
+      method: "POST",
+      body: JSON.stringify(data),
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Error! status: ${response.status}`);
+    }
+    const result: CreateResponse = await response.json();
+    mutate();
+    setLoading(false);
+    reset();
+    return result;
+  } catch (error) {
+    if (error instanceof Error) {
+      console.log("error message: ", error.message);
+      return null;
+    } else {
+      console.log("unexpected error: ", error);
+      return null;
+    }
+  }
+});
+
+
 
   return (
     <>
@@ -64,7 +102,6 @@ export const Form: React.FC<Props> = ({}) => {
               />
             </div>
           </div>
-
           <div className="mt-3">
             <div className={styles.info}>
               <label className={styles.label}>Nazwa dodającego</label>
@@ -81,7 +118,6 @@ export const Form: React.FC<Props> = ({}) => {
               />
             </div>
           </div>
-
           <div className="mt-3">
             <div className={styles.info}>
               <label className={styles.label}>Id playlisty na Spotify</label>
@@ -89,7 +125,6 @@ export const Form: React.FC<Props> = ({}) => {
                 <span className={styles.error}>Pole wymagane</span>
               )}
             </div>
-
             <div className={styles.search}>
               <div className={styles.searchWrapper}>
                 <div className={styles.searchIconWrapper}>
@@ -107,7 +142,6 @@ export const Form: React.FC<Props> = ({}) => {
               </div>
             </div>
           </div>
-
           <div className="mt-3">
             <div className={styles.info}>
               <label className={styles.label}>Kolor</label>
@@ -115,7 +149,6 @@ export const Form: React.FC<Props> = ({}) => {
                 <span className={styles.error}>Kolor musi być w hexie</span>
               )}
             </div>
-
             <div className="mt-1">
               <input
                 type="text"
@@ -127,7 +160,6 @@ export const Form: React.FC<Props> = ({}) => {
               />
             </div>
           </div>
-
           <div className="mt-12 mb-4">
             <button className={styles.button} type="submit">
               Dodaj playlistę
@@ -139,5 +171,4 @@ export const Form: React.FC<Props> = ({}) => {
     </>
   );
 };
-
 export default Form;
